@@ -21,6 +21,9 @@ npx playwright show-report           # View HTML report (local only)
 
 ## Development Principles
 
+### Contract-Driven Development
+Define every contract before writing implementation code. The sequence is: define the type/interface contract → write tests against that contract → implement the minimum code to satisfy the contract. Contracts include API request/response shapes, component props, service method signatures, database schemas, and inter-module boundaries. All contracts live in `src/contracts/` as TypeScript types and are the single source of truth — implementation code imports from contracts, never the other way around. When a feature touches multiple layers (e.g. API → service → database), define all layer contracts first, verify they compose correctly, then implement top-down or bottom-up. Never change a contract without updating every consumer. If a contract change is needed mid-sprint, treat it as a deliberate decision: update the contract file, confirm all dependent tests fail as expected, then update implementations to match.
+
 ### Test-Driven Development
 Always write the test first. The sequence is: write a failing test → confirm it fails → write the minimum code to make it pass → refactor. Do not write implementation code without a corresponding test already in place.
 
