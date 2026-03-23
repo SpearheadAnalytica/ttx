@@ -71,6 +71,8 @@ export type RoomStore = {
   rooms: Room[];
   /** The room the user is currently viewing. */
   activeRoomId: RoomId | null;
+  /** All rooms the current user belongs to (multi-room membership). */
+  joinedRoomIds: RoomId[];
   /** Rooms that have unread messages (for facilitator/evaluator multi-room view). */
   unreadRoomIds: Set<RoomId>;
   isLoading: boolean;
@@ -83,6 +85,7 @@ export type RoomStore = {
   setActiveRoom: (roomId: RoomId) => void;
   markRoomRead: (roomId: RoomId) => void;
   markRoomUnread: (roomId: RoomId) => void;
+  setJoinedRooms: (roomIds: RoomId[]) => void;
   setLoading: (isLoading: boolean) => void;
 };
 
@@ -294,7 +297,77 @@ export type ProjectionStore = {
 // LOBBY STORE — player lobby for room code join flow
 // ═══════════════════════════════════════════════════════════════
 
+import type { VideoMeetingState, VideoParticipant, MeetingId } from './video';
+import type { DirectMessage, DMThread, DMThreadId } from './dm';
+import type { ExportResult, ExportId } from './export';
 import type { ExerciseParticipant } from './user';
+
+// ═══════════════════════════════════════════════════════════════
+// VIDEO STORE — per-room video conferencing state
+// ═══════════════════════════════════════════════════════════════
+
+export type VideoStore = {
+  // ── State ──
+  /** Video meeting states keyed by room ID. */
+  meetings: Map<string, VideoMeetingState>;
+  /** Whether the current user's mic is muted. */
+  isSelfMuted: boolean;
+  /** Whether the current user's camera is on. */
+  isSelfCameraOn: boolean;
+  /** Whether the current user is screen sharing. */
+  isSelfScreenSharing: boolean;
+
+  // ── Actions ──
+  setMeetingState: (roomId: RoomId, state: VideoMeetingState) => void;
+  removeMeeting: (roomId: RoomId) => void;
+  updateParticipant: (roomId: RoomId, participant: VideoParticipant) => void;
+  setSelfMuted: (isMuted: boolean) => void;
+  setSelfCameraOn: (isOn: boolean) => void;
+  setSelfScreenSharing: (isSharing: boolean) => void;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// DM STORE — direct message threads and state
+// ═══════════════════════════════════════════════════════════════
+
+export type DMStore = {
+  // ── State ──
+  /** All DM threads for the current user. */
+  threads: DMThread[];
+  /** Currently active DM thread (open conversation). */
+  activeThreadId: DMThreadId | null;
+  /** Messages for the active thread. */
+  activeMessages: DirectMessage[];
+  /** Total unread DM count across all threads. */
+  totalUnreadCount: number;
+  isLoading: boolean;
+
+  // ── Actions ──
+  setThreads: (threads: DMThread[]) => void;
+  addThread: (thread: DMThread) => void;
+  setActiveThread: (threadId: DMThreadId | null) => void;
+  setActiveMessages: (messages: DirectMessage[]) => void;
+  addMessage: (message: DirectMessage) => void;
+  markThreadRead: (threadId: DMThreadId) => void;
+  updateUnreadCount: (threadId: DMThreadId, count: number) => void;
+  setLoading: (isLoading: boolean) => void;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORT STORE — export job tracking
+// ═══════════════════════════════════════════════════════════════
+
+export type ExportStore = {
+  // ── State ──
+  /** Active and recent export jobs. */
+  exports: ExportResult[];
+  isExporting: boolean;
+
+  // ── Actions ──
+  addExport: (result: ExportResult) => void;
+  updateExport: (exportId: ExportId, updates: Partial<ExportResult>) => void;
+  setExporting: (isExporting: boolean) => void;
+};
 
 export type LobbyStore = {
   // ── State ──

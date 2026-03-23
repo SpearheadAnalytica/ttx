@@ -22,3 +22,6 @@ export * from './aar';
 export * from './reconstruction';
 export * from './audit';
 export * from './projection';
+export * from './video';
+export * from './dm';
+export * from './export';

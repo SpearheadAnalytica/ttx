@@ -279,6 +279,91 @@ Automatic capture — players don't fill out forms:
 
 Facilitator/evaluator observation notes provide the qualitative data. Formal deliverables (press statements, incident reports) are the one place players actively submit — part of the exercise, not admin overhead.
 
+## Video Conferencing (Jitsi)
+
+Each room gets its own Jitsi meeting, embedded via IFrame API. Self-hosted for FedRAMP compliance.
+
+- **Per-room meetings**: Separate Jitsi "room" per TTX room. Players join video when they enter a room
+- **Self-hosted**: Full Jitsi stack deployed on-prem or GovCloud. No external video service
+- **IFrame API**: Jitsi embedded in the room view. Facilitator controls via the Jitsi IFrame API
+- **Facilitator controls**: Mute/unmute participants, kick from call, screen share toggle
+- **Comms control**: Destroying a meeting = cutting comms for that room. Creating a new meeting = restoring comms. This is how the facilitator simulates network outages or isolation
+- **JWT auth**: Meeting access controlled via JWT tokens generated server-side per participant
+
+Architectural note: Jitsi integration is a separate service layer. The core exercise mechanics (chat, injects, timeline) work without video. Video is additive.
+
+## Enterprise Authentication
+
+Federal agencies require PIV/CAC smart card authentication. State governments use SAML/OIDC SSO. The platform supports multiple auth providers per organization.
+
+- **Identity broker**: Keycloak (self-hosted). Handles PIV/CAC, SAML, OIDC, and email magic link
+- **Auth flow**: Client → Keycloak → Identity Provider → Keycloak → App session
+- **PIV/CAC**: X.509 certificate auth via Keycloak's X.509 authenticator. Certificate fingerprint validation
+- **SAML/OIDC**: Standard SSO flows for agencies with existing identity providers (Azure AD, Okta, ADFS)
+- **Email magic link**: Default for non-government users. NextAuth.js handles link generation and verification
+- **Session management**: Token rotation (configurable, default 15 min), inactivity timeout (default 30 min), max session (default 8 hours). All configurable per-organization
+- **Multi-tenancy**: Each organization gets its own Keycloak realm with independent auth settings
+
+Route: Auth configuration lives in the admin panel, not the exercise setup wizard.
+
+## Player-to-Player Direct Messages
+
+Players can send private DMs to any other player in the exercise, regardless of room assignment. Facilitator controls DM permissions.
+
+- **Thread model**: Each DM conversation is a thread between exactly two participants
+- **Role attribution**: Messages show the sender's role name ("SOC Analyst" → "CISO"), not real names. Audit log tracks both
+- **Facilitator controls**: Enable/disable DMs globally per exercise, restrict specific players
+- **Exercise-scoped**: DMs only exist within an exercise context. No cross-exercise messaging
+- **AAR inclusion**: DM transcripts are exportable and included in AAR data
+- **Notifications**: Real-time via socket. Unread count badge in player UI
+
+DMs enable coordination that mirrors real incident response — the CISO texting the legal team directly while the main channel stays focused on technical response.
+
+## Export Wizard
+
+Configurable data export for post-exercise analysis and reporting.
+
+- **Categories**: Injects delivered, player actions, chat transcripts (by room), facilitator notes, white-carded injects, phase transitions, comms restrictions, attendance, RFI log, DM transcripts, evaluator ratings
+- **Formats**: CSV (one file per category in a zip) or Excel (.xlsx with one sheet per category)
+- **Filters**: By room, by date/time range within the exercise, by category
+- **Async processing**: Export jobs run in the background. Facilitator sees progress and downloads when complete
+- **Presigned URLs**: Download links are temporary (presigned S3/MinIO URLs, 1-hour expiry)
+
+## Information Asymmetry
+
+Information asymmetry is a first-class exercise mechanic, not a bug. The facilitator controls who sees what.
+
+- **Visibility rules**: Per-room configuration controlling what players can see
+  - Can they see other rooms exist?
+  - Which rooms' activity is visible?
+  - Document access scope (own room, specific rooms, all)
+  - Inject visibility (targeted only, plenary only, all)
+- **Multi-room players**: A player in multiple rooms becomes a natural coordination point — they see both rooms' intel, which mirrors real incident command
+- **Facilitator dashboard**: Shows the full picture. Players see only their allowed slice
+- **Mid-exercise changes**: Facilitator can adjust visibility rules live (e.g., "Room A can now see Room B's documents" to simulate intelligence sharing)
+
+## Setup Wizard
+
+The 11-step exercise setup wizard guides the planner through configuration.
+
+| Step | Purpose | Required? |
+|---|---|---|
+| 1. Create | Name, description, date(s), organization | Yes |
+| 2. Scenario | Narrative text, background docs, starting conditions | Yes |
+| 3. Rooms | Create rooms, set types, assign video | No (defaults to Plenary) |
+| 4. Injects | Bulk CSV import or create one-by-one | Yes |
+| 5. Players | Add players, assign rooms/roles (CSV or manual) | Yes |
+| 6. Facilitators | Add facilitators with flags | Yes (at least one) |
+| 7. Phases | Define phases with duration and transition triggers | Yes |
+| 8. Comms Rules | Communication matrix and presets | No (defaults to Controlled) |
+| 9. Pre-stage Files | Upload docs, network diagrams, policies per room | No |
+| 10. Dry Run | Walk through inject timeline without players | No |
+| 11. Go Live | Start the exercise clock | Yes |
+
+**Dry Run**: The facilitator can preview the inject timeline — the clock runs, injects fire in sequence, but no players are connected. This validates timing and content before real participants join.
+
+**Bulk Import**: CSV upload for players and injects. Parse → validate → preview errors → confirm import. Template CSVs downloadable from the wizard.
+
 ## Data Model (High-Level)
 
 ```

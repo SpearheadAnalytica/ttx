@@ -28,6 +28,8 @@ model User {
   evaluatorNotes       EvaluatorNote[]
   timelineEvents       TimelineEvent[]       @relation("TimelineActor")
   auditActions         AuditLog[]            @relation("AuditActor")
+  sentDMs              DirectMessage[]       @relation("DMSender")
+  receivedDMs          DirectMessage[]       @relation("DMRecipient")
 
   @@map("users")
 }
@@ -66,11 +68,15 @@ model Exercise {
   /// { accessType: 'link'|'password'|'email_list', password?: string, allowedEmails?: string[], linkToken?: string }
   observerConfig        Json                @default("{\"accessType\": \"link\", \"password\": null, \"allowedEmails\": [], \"linkToken\": null}")
 
+  /// DM permissions: { isEnabled: boolean, restrictedPlayerIds: string[] }
+  dmPermissions         Json                @default("{\"isEnabled\": true, \"restrictedPlayerIds\": []}")
+
   // Relations
   rooms                 Room[]
   phases                Phase[]
   participants          ExerciseParticipant[]
   messages              Message[]
+  directMessages        DirectMessage[]
   timelineEvents        TimelineEvent[]
   auditLogs             AuditLog[]
 
@@ -81,7 +87,9 @@ model Exercise {
 
 enum ExerciseStatus {
   DRAFT
-  ACTIVE
+  CONFIGURING
+  READY
+  LIVE
   PAUSED
   COMPLETED
 }
@@ -168,6 +176,10 @@ model Room {
   isPlenary         Boolean               @default(false)
   /// Per-room participation mode for hybrid exercises
   participationMode RoomParticipationMode @default(DIGITAL)
+  /// Whether video conferencing is enabled for this room
+  isVideoEnabled    Boolean               @default(false)
+  /// Information asymmetry rules (JSON: VisibilityRules)
+  visibilityRules   Json                  @default("{\"canSeeOtherRoomsExist\": false, \"visibleRoomIds\": [], \"documentScope\": \"own_room\", \"visibleDocumentRoomIds\": [], \"injectVisibility\": \"targeted_only\"}")
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
@@ -189,15 +201,22 @@ enum RoomParticipationMode {
   FACILITATOR_LED
 }
 
-/// Join table: which players are in which room
+/// Join table: which players are in which room.
+/// Players can be in multiple rooms (multi-room membership).
 model RoomPlayer {
-  id        String   @id @default(cuid())
-  roomId    String
-  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  userId    String
-  joinedAt  DateTime @default(now())
+  id              String   @id @default(cuid())
+  roomId          String
+  room            Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId          String
+  exerciseId      String
+  /// Whether this is the player's primary room (shown on login).
+  isPrimaryRoom   Boolean  @default(false)
+  /// The player's role name in this room.
+  roleName        String   @default("")
+  joinedAt        DateTime @default(now())
 
-  @@unique([roomId, userId])
+  @@unique([roomId, userId, exerciseId])
+  @@index([userId, exerciseId])
   @@map("room_players")
 }
 
@@ -405,6 +424,35 @@ enum TimelineEventType {
   DECISION_TAGGED
   CROSS_ROOM_MESSAGE
   ROLE_TRANSFERRED
+}
+
+// ─── Direct Messages ─────────────────────────────────────────
+
+/// Player-to-player direct messages. Scoped to an exercise.
+/// Messages attributed to roles (senderRoleName) for AAR narrative.
+model DirectMessage {
+  id              String   @id @default(cuid())
+  /// Thread ID groups messages between two participants
+  threadId        String
+  /// Tiptap JSON content
+  content         Json
+  /// Role name at time of sending (for AAR attribution)
+  senderRoleName  String   @default("")
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  exerciseId      String
+  exercise        Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User     @relation("DMSender", fields: [senderId], references: [id])
+  recipientId     String
+  recipient       User     @relation("DMRecipient", fields: [recipientId], references: [id])
+
+  @@index([exerciseId, threadId, createdAt])
+  @@index([recipientId, isRead])
+  @@map("direct_messages")
 }
 
 // ─── Audit Log (FedRAMP-ready, append-only) ──────────────────

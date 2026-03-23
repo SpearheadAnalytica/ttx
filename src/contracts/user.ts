@@ -9,6 +9,46 @@
  */
 
 export type UserId = string & { readonly __brand: 'UserId' };
+export type OrganizationId = string & { readonly __brand: 'OrganizationId' };
+
+// ── Authentication Providers ─────────────────────────────────
+
+/**
+ * Supported authentication methods.
+ * Federal agencies require PIV/CAC. State governments use SAML/OIDC SSO.
+ * Email magic link is the default for non-government users.
+ */
+export type AuthProvider = 'email_magic_link' | 'saml' | 'oidc' | 'piv_cac';
+
+/**
+ * Per-organization authentication configuration.
+ * Keycloak is the recommended identity broker (self-hosted, supports all providers).
+ */
+export type AuthConfig = {
+  organizationId: OrganizationId;
+  provider: AuthProvider;
+  /** SAML/OIDC issuer URL. Null for email and PIV/CAC. */
+  issuerUrl: string | null;
+  /** OAuth client ID. Null for email and PIV/CAC. */
+  clientId: string | null;
+  /** Certificate fingerprint for PIV/CAC validation. Null for other providers. */
+  certificateFingerprint: string | null;
+  /** Keycloak realm name (when using Keycloak as broker). */
+  keycloakRealm: string | null;
+};
+
+/**
+ * Session management configuration. Enforced server-side.
+ * FedRAMP requires configurable timeouts and token rotation.
+ */
+export type SessionConfig = {
+  /** How often to rotate session tokens (minutes). Default: 15. */
+  tokenRotationMinutes: number;
+  /** Inactivity timeout before auto-logout (minutes). Default: 30. */
+  inactivityTimeoutMinutes: number;
+  /** Maximum session duration regardless of activity (hours). Default: 8. */
+  maxSessionHours: number;
+};
 
 /**
  * Base runtime role. Determines the participant's primary view and capabilities.

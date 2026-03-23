@@ -8,6 +8,7 @@
  */
 
 import type { UserId } from './user';
+import type { RoomVideoConfig } from './video';
 
 export type RoomId = string & { readonly __brand: 'RoomId' };
 
@@ -39,7 +40,50 @@ export type Room = {
    * The first room created for an exercise is always the plenary.
    */
   isPlenary: boolean;
+  /** Video conferencing configuration. Null = no video for this room. */
+  videoConfig: RoomVideoConfig | null;
+  /** Information asymmetry rules — controls what this room's players can see. */
+  visibilityRules: VisibilityRules;
   createdAt: Date;
+};
+
+// ── Multi-Room Membership ────────────────────────────────────
+
+/**
+ * A player's membership in a room. Players can be in multiple rooms
+ * within the same exercise (e.g., CISO monitoring SOC and Executive rooms).
+ */
+export type RoomPlayer = {
+  roomId: RoomId;
+  userId: UserId;
+  exerciseId: string;
+  /** The player's primary room — shown on login, used as default view. */
+  isPrimaryRoom: boolean;
+  /** Role name within this room (e.g., "SOC Analyst", "CISO"). */
+  roleName: string;
+  joinedAt: Date;
+};
+
+// ── Information Asymmetry ────────────────────────────────────
+
+/**
+ * Controls what players in a room can see. Set by the facilitator.
+ * This is a first-class exercise mechanic — information asymmetry by design.
+ *
+ * A player in only one room has a partial picture. A multi-room player
+ * becomes a natural coordination point, mirroring real incident command.
+ */
+export type VisibilityRules = {
+  /** Can players in this room see that other rooms exist? */
+  canSeeOtherRoomsExist: boolean;
+  /** Which specific rooms are visible (names/activity). Empty = none visible. */
+  visibleRoomIds: RoomId[];
+  /** What documents this room can access. */
+  documentScope: 'own_room' | 'specific_rooms' | 'all';
+  /** If documentScope is 'specific_rooms', which rooms' docs are visible. */
+  visibleDocumentRoomIds: RoomId[];
+  /** What injects this room can see. */
+  injectVisibility: 'targeted_only' | 'plenary_only' | 'all';
 };
 
 export type CreateRoomInput = {

@@ -37,6 +37,13 @@ import type {
 import type { TimelineEvent, TimelineEventType } from './timeline';
 import type { AuditEntry, RecordAuditInput, AuditLogFilters } from './audit';
 import type { ProjectionState, ProjectionConfig } from './projection';
+import type { WhiteCardForm, WhiteCardInject } from './inject';
+import type { DirectMessage, DMThread, DMPermissions, SendDMInput } from './dm';
+import type { ExportId, ExportConfig, ExportResult } from './export';
+import type { VideoMeetingState, JitsiCommand } from './video';
+import type { BulkPlayerImport, BulkInjectImport, DryRunState, SetupWizardState, SetupWizardStep } from './exercise';
+import type { AuthProvider, AuthConfig, SessionConfig, OrganizationId } from './user';
+import type { VisibilityRules } from './room';
 
 // ═══════════════════════════════════════════════════════════════
 // EXERCISE SERVICE
@@ -118,6 +125,24 @@ export type RoomService = {
 
   /** Set per-room participation mode (for hybrid exercises). */
   setRoomParticipationMode(roomId: RoomId, mode: RoomParticipationMode): Promise<Room>;
+
+  /** Add a player to multiple rooms (multi-room membership). */
+  addPlayerToRooms(exerciseId: ExerciseId, userId: UserId, roomIds: RoomId[], primaryRoomId: RoomId): Promise<void>;
+
+  /** Set a player's primary room. */
+  setPrimaryRoom(exerciseId: ExerciseId, userId: UserId, roomId: RoomId): Promise<void>;
+
+  /** Get all rooms a player belongs to. */
+  getPlayerRooms(exerciseId: ExerciseId, userId: UserId): Promise<Room[]>;
+
+  /** Set visibility rules for a room (information asymmetry). */
+  setVisibilityRules(roomId: RoomId, rules: VisibilityRules): Promise<Room>;
+
+  /** Get rooms visible to a player (based on their room's visibility rules). */
+  getVisibleRooms(exerciseId: ExerciseId, userId: UserId): Promise<Room[]>;
+
+  /** Enable/disable video for a room. */
+  setVideoEnabled(roomId: RoomId, isEnabled: boolean): Promise<Room>;
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -175,6 +200,12 @@ export type InjectService = {
 
   /** Manually deliver an inject to its target room. Creates a Message of type INJECT. */
   deliverInject(injectId: InjectId, exerciseId: ExerciseId): Promise<{ inject: Inject; message: Message }>;
+
+  /**
+   * White-card an inject — create and deliver a live inject during an exercise.
+   * Used by facilitators/co-facilitators for improvised injects.
+   */
+  whiteCardInject(exerciseId: ExerciseId, facilitatorId: UserId, form: WhiteCardForm): Promise<WhiteCardInject>;
 
   /** Mark an inject as read by a player. */
   markInjectRead(injectId: InjectId): Promise<Inject>;
@@ -369,6 +400,21 @@ export type AuthService = {
 
   /** Update user profile. */
   updateUser(userId: UserId, input: { displayName?: string; avatarUrl?: string | null }): Promise<User>;
+
+  /**
+   * Authenticate using an external provider (SAML, OIDC, PIV/CAC).
+   * Token format depends on provider type.
+   */
+  authenticateWithProvider(provider: AuthProvider, token: string): Promise<User>;
+
+  /** Configure SSO settings for an organization. Creator/admin only. */
+  configureSSOForOrg(orgId: OrganizationId, config: AuthConfig): Promise<AuthConfig>;
+
+  /** Rotate a session token. Called periodically per SessionConfig. */
+  rotateSessionToken(sessionId: string): Promise<{ newToken: string; expiresAt: Date }>;
+
+  /** Get session configuration (org-level or default). */
+  getSessionConfig(orgId?: OrganizationId): Promise<SessionConfig>;
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -432,4 +478,121 @@ export type JoinService = {
 
   /** Validate a magic link token from an email invite. */
   validateInviteToken(token: string): Promise<{ exerciseId: ExerciseId; userId: UserId; roomId: RoomId } | null>;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// VIDEO SERVICE (Jitsi integration)
+// ═══════════════════════════════════════════════════════════════
+
+export type VideoService = {
+  /** Create a Jitsi meeting for a room. Returns meeting state. */
+  createMeeting(exerciseId: ExerciseId, roomId: RoomId): Promise<VideoMeetingState>;
+
+  /** Destroy a meeting (cuts comms for that room). */
+  destroyMeeting(exerciseId: ExerciseId, roomId: RoomId): Promise<void>;
+
+  /** Get current video state for a room. */
+  getVideoState(roomId: RoomId): Promise<VideoMeetingState | null>;
+
+  /** Mute a participant in a room's meeting. */
+  muteParticipant(roomId: RoomId, userId: UserId): Promise<void>;
+
+  /** Unmute a participant. */
+  unmuteParticipant(roomId: RoomId, userId: UserId): Promise<void>;
+
+  /** Kick a participant from a room's video call. */
+  kickParticipant(roomId: RoomId, userId: UserId): Promise<void>;
+
+  /** Execute a Jitsi command (generic). */
+  executeCommand(exerciseId: ExerciseId, command: JitsiCommand): Promise<void>;
+
+  /** Generate a JWT token for a user to join a Jitsi meeting. */
+  generateJitsiToken(userId: UserId, roomId: RoomId): Promise<string>;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// DM SERVICE (direct messages)
+// ═══════════════════════════════════════════════════════════════
+
+export type DMService = {
+  /** Send a direct message. Validates DM permissions first. */
+  sendDM(senderId: UserId, input: SendDMInput): Promise<DirectMessage>;
+
+  /** Get or create a DM thread between two users in an exercise. */
+  getDMThread(exerciseId: ExerciseId, userIdA: UserId, userIdB: UserId): Promise<DMThread>;
+
+  /** Get all DM threads for a user in an exercise. */
+  getThreadsForUser(exerciseId: ExerciseId, userId: UserId): Promise<DMThread[]>;
+
+  /** Get messages in a DM thread, paginated. */
+  getThreadMessages(threadId: string, options: { limit: number; before?: Date }): Promise<DirectMessage[]>;
+
+  /** Mark all messages in a thread as read for a user. */
+  markAsRead(threadId: string, userId: UserId): Promise<void>;
+
+  /** Facilitator: enable or disable DMs for an exercise. */
+  setDMEnabled(exerciseId: ExerciseId, isEnabled: boolean): Promise<DMPermissions>;
+
+  /** Facilitator: restrict a specific player from DMs. */
+  restrictPlayer(exerciseId: ExerciseId, userId: UserId): Promise<DMPermissions>;
+
+  /** Facilitator: unrestrict a player. */
+  unrestrictPlayer(exerciseId: ExerciseId, userId: UserId): Promise<DMPermissions>;
+
+  /** Get current DM permissions for an exercise. */
+  getDMPermissions(exerciseId: ExerciseId): Promise<DMPermissions>;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORT SERVICE
+// ═══════════════════════════════════════════════════════════════
+
+export type ExportService = {
+  /** Start an export job. Returns immediately with export ID; processing is async. */
+  generateExport(userId: UserId, config: ExportConfig): Promise<ExportResult>;
+
+  /** Check the status of an export job. */
+  getExportStatus(exportId: ExportId): Promise<ExportResult>;
+
+  /** Get the download URL for a completed export. Throws if not completed. */
+  downloadExport(exportId: ExportId): Promise<{ url: string; expiresAt: Date }>;
+
+  /** List all exports for an exercise. */
+  listExports(exerciseId: ExerciseId): Promise<ExportResult[]>;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// SETUP SERVICE (wizard + bulk import + dry run)
+// ═══════════════════════════════════════════════════════════════
+
+export type SetupService = {
+  /** Get current wizard state for an exercise. */
+  getWizardState(exerciseId: ExerciseId): Promise<SetupWizardState>;
+
+  /** Mark a wizard step as completed. */
+  completeStep(exerciseId: ExerciseId, step: SetupWizardStep): Promise<SetupWizardState>;
+
+  /** Skip a wizard step. */
+  skipStep(exerciseId: ExerciseId, step: SetupWizardStep): Promise<SetupWizardState>;
+
+  /** Parse and validate a CSV for bulk player import. Does not persist. */
+  parsePlayerCSV(csvData: string): Promise<BulkPlayerImport>;
+
+  /** Execute a validated bulk player import. */
+  importPlayers(exerciseId: ExerciseId, importData: BulkPlayerImport): Promise<{ imported: number; errors: string[] }>;
+
+  /** Parse and validate a CSV for bulk inject import. Does not persist. */
+  parseInjectCSV(csvData: string): Promise<BulkInjectImport>;
+
+  /** Execute a validated bulk inject import. */
+  importInjects(exerciseId: ExerciseId, importData: BulkInjectImport): Promise<{ imported: number; errors: string[] }>;
+
+  /** Start a dry run — facilitator previews inject timeline without players. */
+  startDryRun(exerciseId: ExerciseId): Promise<DryRunState>;
+
+  /** Advance the dry run clock by a number of seconds. */
+  advanceDryRun(exerciseId: ExerciseId, seconds: number): Promise<DryRunState>;
+
+  /** End the dry run. */
+  endDryRun(exerciseId: ExerciseId): Promise<void>;
 };
