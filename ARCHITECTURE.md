@@ -18,6 +18,9 @@ A real-time, web-based Tabletop Exercise (TTX) platform for cybersecurity incide
 | State | Zustand | Lightweight, no boilerplate, good with real-time |
 | Testing | Playwright (E2E) + Vitest (unit) | Per CLAUDE.md — Playwright for UI, Vitest for logic |
 | File uploads | S3-compatible (local: MinIO) | Evidence attachments, inject assets |
+| AAR AI agent | Claude API | Structured output, long context for full exercise data |
+| Visualization | D3.js | Flow diagrams, interactive timeline, analysis overlays |
+| Error handling | Typed error codes + factories | Consistent wire format, fail-loudly enforcement |
 
 ## UI Design
 
@@ -137,7 +140,8 @@ Event (for timeline)
 /exercises/[id]/evaluate    → Evaluator live view (split: feed + notes)
 /exercises/[id]/observe     → Observer dashboard (read-only)
 /exercises/[id]/room/[roomId] → Player room view
-/exercises/[id]/aar         → After Action Report
+/exercises/[id]/aar         → After Action Report (view + edit)
+/exercises/[id]/reconstruct → Exercise reconstruction visual
 /join/[code]                → Player join via room code
 /watch/[token]              → Observer join via shareable link
 ```
@@ -227,16 +231,27 @@ src/
 │   ├── facilitate/             # Facilitator view components
 │   ├── evaluate/               # Evaluator view components
 │   ├── observe/                # Observer dashboard components
+│   ├── aar/                    # AAR viewer and editor components
+│   ├── reconstruction/         # Visual replay + analysis components
 │   └── shared/                 # Cross-cutting components (timeline, etc.)
 ├── contracts/                  # TypeScript types — single source of truth
+│   ├── user.ts
 │   ├── exercise.ts
 │   ├── room.ts
 │   ├── message.ts
 │   ├── inject.ts
-│   ├── user.ts
-│   ├── evaluator.ts
 │   ├── communication.ts
-│   └── socket-events.ts
+│   ├── evaluator.ts
+│   ├── socket-events.ts
+│   ├── timeline.ts
+│   ├── services.ts             # All service function signatures
+│   ├── stores.ts               # All Zustand store state + actions
+│   ├── errors.ts               # Typed error codes + factories
+│   ├── api.ts                  # REST request/response shapes
+│   ├── editor.ts               # Tiptap editor variant configs
+│   ├── aar.ts                  # After Action Report + AI agent
+│   ├── reconstruction.ts       # Visual replay + analysis tools
+│   └── index.ts                # Barrel export
 ├── lib/
 │   ├── socket.ts               # Socket.io client setup
 │   ├── prisma.ts               # Prisma client singleton
@@ -245,14 +260,29 @@ src/
 │   ├── socket-handler.ts       # Socket.io server event handlers
 │   ├── services/               # Business logic
 │   │   ├── exercise-service.ts
+│   │   ├── room-service.ts
 │   │   ├── message-service.ts
 │   │   ├── inject-service.ts
-│   │   ├── rfi-service.ts
-│   │   └── communication-service.ts
+│   │   ├── communication-service.ts
+│   │   ├── evaluator-service.ts
+│   │   ├── timeline-service.ts
+│   │   ├── staff-service.ts
+│   │   ├── auth-service.ts
+│   │   └── aar-service.ts
+│   ├── ai/                     # AI agent for AAR generation
+│   │   └── aar-agent.ts
+│   ├── errors.ts               # Error factory implementations
 │   └── api/                    # REST API route handlers
 ├── stores/                     # Zustand stores
+│   ├── auth-store.ts
 │   ├── exercise-store.ts
 │   ├── room-store.ts
+│   ├── message-store.ts
+│   ├── rfi-store.ts
+│   ├── inject-store.ts
+│   ├── communication-store.ts
+│   ├── evaluator-store.ts
+│   ├── timeline-store.ts
 │   └── socket-store.ts
 ├── styles/
 │   └── globals.css             # Tailwind base + custom properties
@@ -275,6 +305,123 @@ prisma/
 ├── schema.prisma
 └── migrations/
 ```
+
+## After Action Report (AAR)
+
+The AAR is the capstone deliverable — an AI-drafted analysis document produced from all exercise data.
+
+### Generation Flow
+
+```
+Exercise completes
+  → Facilitator clicks "Generate AAR"
+  → System bundles all data (timeline, messages, notes, metrics)
+  → AI agent (Claude API) processes the bundle
+  → Structured output: executive summary, sections, findings, recommendations
+  → Draft appears in rich text editor for facilitator review
+  → Facilitator edits, reviews each section, publishes
+  → Export to PDF, HTML, Markdown, or JSON
+```
+
+### AAR Sections
+
+| Section | AI Input | Purpose |
+|---|---|---|
+| Executive Summary | Full exercise data | 1-page overview for leadership |
+| Exercise Overview | Metadata, participants | Context and objectives |
+| Timeline Narrative | All timeline events | Chronological story of what happened |
+| Phase Analysis | Per-phase data | Breakdown of each phase's events |
+| Communication Analysis | Message patterns, matrix changes | Cross-room communication effectiveness |
+| Decision Analysis | Evaluator-tagged decisions | Key decisions and their outcomes |
+| Gap Analysis | Evaluator notes with gap/missed tags | Identified weaknesses |
+| Strengths | Evaluator notes with positive tags | What went well |
+| Recommendations | Findings + AI analysis | Prioritized action items |
+| Appendix | Raw data | Supporting evidence |
+
+### AI Agent Design
+
+- **Input**: Single structured payload with all exercise data (plain text extracted from rich text for token efficiency)
+- **Output**: Structured JSON with markdown content per section (converted to Tiptap JSON for editing)
+- **Streaming**: Progress events via SSE so UI shows generation status per section
+- **Findings**: AI synthesizes evaluator notes + its own analysis into ranked findings with severity levels
+- **Recommendations**: Each recommendation links back to supporting findings
+
+## Exercise Reconstruction
+
+Interactive visual replay and analysis tool. Built with D3.js for the flow diagram, React for controls and detail panels.
+
+### What It Shows
+
+- **Flow diagram**: Rooms as nodes, communication as edges. Edges appear/disappear as communication rules change. Edge thickness = message volume.
+- **Timeline ruler**: Phase boundaries, inject markers, key moments. Scrub to any point.
+- **Playback**: Play/pause/seek like a video. Speed: 1x, 2x, 5x, 10x, 30x.
+- **Drill-down**: Click any event, room, or edge → detail panel with messages, notes, metrics from that moment.
+
+### Analysis Overlays
+
+Toggle-able layers on top of the base diagram:
+
+| Overlay | What it shows |
+|---|---|
+| Response Time Heatmap | Rooms colored by avg inject response time (green=fast, red=slow) |
+| Communication Volume | Edge thickness = message count between rooms |
+| RFI Flow | All RFI paths with status color coding |
+| Decision Points | Evaluator-tagged decision moments highlighted |
+| Bottleneck Detection | AI-identified bottlenecks (slow responses, queued RFIs) |
+| Activity Heatmap | Room brightness = message rate over time |
+
+### Annotations
+
+Facilitators pin annotations to specific moments in the reconstruction for the AAR. Annotations are callout bubbles with category (insight/issue/highlight/question) and can be exported as screenshots.
+
+## Error Handling
+
+Follows the "fail loudly" principle. Typed error codes, never swallowed.
+
+### Pattern
+
+```typescript
+// Factory functions create consistent errors
+throw notFound('Exercise', exerciseId);
+throw permissionDenied('send message', 'facilitator');
+throw invalidTransition('Exercise', 'DRAFT', 'COMPLETED');
+
+// Global error handler catches, logs with [module] prefix, returns ApiResponse
+// { ok: false, error: { code: 'EXERCISE_NOT_FOUND', message: '...' } }
+```
+
+### Error Categories
+
+| Category | HTTP Status | Examples |
+|---|---|---|
+| Auth | 401/403 | AUTH_REQUIRED, AUTH_FORBIDDEN |
+| Not Found | 404 | EXERCISE_NOT_FOUND, ROOM_NOT_FOUND |
+| Validation | 400 | INVALID_INPUT, INVALID_RICH_TEXT, FILE_TOO_LARGE |
+| State Conflict | 409 | INVALID_STATUS_TRANSITION, RFI_ALREADY_ANSWERED |
+| Permission | 403 | NOT_FACILITATOR, COMMUNICATION_BLOCKED |
+| Rate Limit | 429 | RATE_LIMITED, AAR_GENERATION_IN_PROGRESS |
+| Server | 500 | DATABASE_ERROR, AI_SERVICE_ERROR |
+
+## API Design
+
+REST for CRUD and data fetching. Socket.io for real-time events. All REST responses wrapped in `ApiResponse<T>`:
+
+```typescript
+type ApiResponse<T> = { ok: true; data: T } | { ok: false; error: { code, message } };
+```
+
+### Pagination
+
+Cursor-based (not offset-based) for stability under concurrent inserts. Cursor is the `createdAt` ISO string of the last item. Max 100 items per page.
+
+### File Uploads
+
+Two-step presigned URL flow:
+1. `POST /api/uploads/presign` → get presigned S3 URL + file ID
+2. Client uploads directly to S3 (bypasses app server)
+3. `POST /api/uploads/confirm` → confirm upload, get permanent URL
+
+Size limit: 10MB. Allowed types: images, PDFs, text files, CSVs.
 
 ## Security
 
