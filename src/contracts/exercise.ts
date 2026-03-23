@@ -242,7 +242,13 @@ export type BulkInjectImport = {
 
 // ── DM Permissions (Exercise-Level) ──────────────────────────
 
-import type { DMPermissions } from './dm';
-
-/** Exercise-level DM configuration. */
-export type ExerciseDMConfig = DMPermissions;
+/**
+ * Exercise-level DM configuration. Duplicated here to avoid circular
+ * import (dm.ts imports ExerciseId from exercise.ts).
+ */
+export type ExerciseDMConfig = {
+  /** Master toggle — when false, no DMs allowed in this exercise. */
+  isEnabled: boolean;
+  /** Players who are blocked from sending/receiving DMs. */
+  restrictedPlayerIds: string[];
+};

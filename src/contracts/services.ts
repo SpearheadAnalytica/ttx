@@ -213,7 +213,7 @@ export type InjectService = {
   /** Advance to the next phase. Completes current phase, starts next. */
   advancePhase(exerciseId: ExerciseId): Promise<Phase>;
 
-  /** Get the current active phase. Returns null if exercise hasn't started. */
+  /** Get the current active phase. Returns null if exercise hasn't started (legitimate state, not an error). */
   getCurrentPhase(exerciseId: ExerciseId): Promise<Phase | null>;
 
   /** Get all auto-deliverable injects that should fire now (based on phase elapsed time). */
@@ -352,10 +352,10 @@ export type StaffService = {
   /** Generate a shareable observer link token. */
   generateObserverToken(exerciseId: ExerciseId): Promise<string>;
 
-  /** Validate an observer token. Returns exercise ID if valid. */
+  /** Validate an observer token. Returns null for invalid/expired tokens (not an error — expected for bad links). */
   validateObserverToken(token: string): Promise<{ exerciseId: ExerciseId } | null>;
 
-  /** Get a user's role, flags, and permissions for a specific exercise. */
+  /** Get a user's role, flags, and permissions. Returns null if user is not a participant (legitimate query). */
   getParticipant(exerciseId: ExerciseId, userId: UserId): Promise<ExerciseParticipant | null>;
 
   /** Get all staff for an exercise. */
@@ -395,7 +395,7 @@ export type AuthService = {
   /** Get user by ID. Throws if not found. */
   getUser(userId: UserId): Promise<User>;
 
-  /** Get user by email. Returns null if not found. */
+  /** Get user by email. Returns null if not found (legitimate lookup, not an error). */
   getUserByEmail(email: string): Promise<User | null>;
 
   /** Update user profile. */
