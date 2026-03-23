@@ -1,0 +1,345 @@
+// TTX Platform — Database Schema
+// All tables, relations, indexes, and constraints.
+// This is the physical model that maps to src/contracts/ types.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users & Auth ────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  displayName String
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdExercises    Exercise[]          @relation("ExerciseCreator")
+  exerciseParticipants ExerciseParticipant[]
+  sentMessages        Message[]           @relation("MessageSender")
+  evaluatorNotes      EvaluatorNote[]
+  timelineEvents      TimelineEvent[]     @relation("TimelineActor")
+
+  @@map("users")
+}
+
+// ─── Exercises ───────────────────────────────────────────────
+
+model Exercise {
+  id                    String         @id @default(cuid())
+  title                 String
+  description           String         @default("")
+  status                ExerciseStatus @default(DRAFT)
+  communicationPreset   CommunicationPreset @default(CONTROLLED)
+  /// Stored as JSON: Record<string, Record<string, 'direct' | 'routed' | 'blocked'>>
+  communicationMatrix   Json           @default("{}")
+  startedAt             DateTime?
+  pausedAt              DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  // Creator
+  createdById           String
+  createdBy             User           @relation("ExerciseCreator", fields: [createdById], references: [id])
+
+  // Observer access config (embedded as JSON for flexibility)
+  /// { accessType: 'link'|'password'|'email_list', password?: string, allowedEmails?: string[], linkToken?: string }
+  observerConfig        Json           @default("{\"accessType\": \"link\", \"password\": null, \"allowedEmails\": [], \"linkToken\": null}")
+
+  // Relations
+  rooms                 Room[]
+  phases                Phase[]
+  participants          ExerciseParticipant[]
+  messages              Message[]
+  timelineEvents        TimelineEvent[]
+
+  @@index([createdById])
+  @@index([status])
+  @@map("exercises")
+}
+
+enum ExerciseStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum CommunicationPreset {
+  OPEN
+  HIERARCHICAL
+  CONTROLLED
+  CUSTOM
+}
+
+// ─── Participants (role assignments per exercise) ────────────
+
+model ExerciseParticipant {
+  id              String   @id @default(cuid())
+  role            ParticipantRole
+  /// For evaluators: room IDs they can observe. Empty array = all rooms.
+  assignedRoomIds String[] @default([])
+  joinedAt        DateTime @default(now())
+
+  // Relations
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  exerciseId      String
+  exercise        Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, exerciseId])
+  @@index([exerciseId, role])
+  @@map("exercise_participants")
+}
+
+enum ParticipantRole {
+  FACILITATOR
+  EVALUATOR
+  OBSERVER
+  PLAYER
+}
+
+// ─── Rooms ───────────────────────────────────────────────────
+
+model Room {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  /// Hex color for room identification (e.g., '#10b981')
+  color       String   @default("#10b981")
+  /// Join code for players (e.g., 'SOC-7X3K')
+  joinCode    String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  exerciseId  String
+  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  players     RoomPlayer[]
+  messages    Message[]
+  injects     Inject[]
+  evaluatorNotes EvaluatorNote[]
+  timelineEvents TimelineEvent[]
+
+  @@index([exerciseId])
+  @@map("rooms")
+}
+
+/// Join table: which players are in which room
+model RoomPlayer {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  @@unique([roomId, userId])
+  @@map("room_players")
+}
+
+// ─── Messages ────────────────────────────────────────────────
+
+model Message {
+  id          String      @id @default(cuid())
+  type        MessageType
+  /// Tiptap JSON content: { type: 'doc', content: [...] }
+  content     Json
+  /// File attachments as JSON array
+  attachments Json        @default("[]")
+  createdAt   DateTime    @default(now())
+
+  // RFI-specific fields
+  rfiId           String?
+  rfiStatus       RfiStatus?
+  // Inject reference
+  injectId        String?
+  // Cross-room fields
+  sourceRoomId    String?
+  targetRoomId    String?
+  redirectRoomId  String?
+
+  // Relations
+  exerciseId  String
+  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  roomId      String
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User     @relation("MessageSender", fields: [senderId], references: [id])
+
+  // Evaluator notes linked to this message
+  linkedNotes EvaluatorNote[]
+
+  @@index([roomId, createdAt])
+  @@index([exerciseId, type])
+  @@index([rfiId])
+  @@map("messages")
+}
+
+enum MessageType {
+  CHAT
+  RFI_REQUEST
+  RFI_RESPONSE
+  INJECT
+  SYSTEM
+  CROSS_ROOM
+}
+
+enum RfiStatus {
+  PENDING
+  ANSWERED
+  DEFERRED
+  REDIRECTED
+}
+
+// ─── Phases & Injects ────────────────────────────────────────
+
+model Phase {
+  id              String    @id @default(cuid())
+  name            String
+  description     String    @default("")
+  /// Order within exercise (0-indexed)
+  order           Int
+  /// Planned duration in minutes
+  durationMinutes Int
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  // Relations
+  exerciseId      String
+  exercise        Exercise  @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  injects         Inject[]
+
+  @@unique([exerciseId, order])
+  @@index([exerciseId])
+  @@map("phases")
+}
+
+model Inject {
+  id                  String              @id @default(cuid())
+  title               String
+  /// Tiptap JSON content
+  content             Json
+  type                InjectType
+  /// Seconds after phase start to auto-deliver
+  delayFromPhaseStart Int                 @default(0)
+  deliveryMethod      InjectDeliveryMethod @default(MANUAL)
+  status              InjectStatus         @default(PENDING)
+  /// File attachments as JSON array
+  attachments         Json                 @default("[]")
+  deliveredAt         DateTime?
+  readAt              DateTime?
+  createdAt           DateTime             @default(now())
+
+  // Relations
+  phaseId             String
+  phase               Phase                @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  exerciseId          String
+  targetRoomId        String
+  targetRoom          Room                 @relation(fields: [targetRoomId], references: [id])
+
+  @@index([phaseId])
+  @@index([exerciseId, status])
+  @@index([targetRoomId])
+  @@map("injects")
+}
+
+enum InjectType {
+  NARRATIVE
+  QUESTION
+  DATA
+  COMMUNICATION_CHANGE
+}
+
+enum InjectDeliveryMethod {
+  AUTO
+  MANUAL
+}
+
+enum InjectStatus {
+  PENDING
+  DELIVERED
+  READ
+}
+
+// ─── Evaluator Notes ─────────────────────────────────────────
+
+model EvaluatorNote {
+  id              String   @id @default(cuid())
+  /// Tiptap JSON content
+  content         Json
+  /// Quick tags: ['good_decision', 'gap_identified', ...]
+  tags            String[] @default([])
+  /// Rating 1-5, null if not rated
+  rating          Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  exerciseId      String
+  evaluatorId     String
+  evaluator       User     @relation(fields: [evaluatorId], references: [id])
+  roomId          String
+  room            Room     @relation(fields: [roomId], references: [id])
+  /// Optional link to the message that prompted this note
+  linkedMessageId String?
+  linkedMessage   Message? @relation(fields: [linkedMessageId], references: [id])
+
+  @@index([exerciseId, evaluatorId])
+  @@index([roomId, createdAt])
+  @@index([exerciseId, tags])
+  @@map("evaluator_notes")
+}
+
+// ─── Timeline Events ─────────────────────────────────────────
+
+model TimelineEvent {
+  id          String            @id @default(cuid())
+  type        TimelineEventType
+  /// Human-readable summary
+  summary     String
+  /// Type-specific metadata as JSON
+  metadata    Json              @default("{}")
+  createdAt   DateTime          @default(now())
+
+  // Relations
+  exerciseId  String
+  exercise    Exercise          @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  roomId      String?
+  room        Room?             @relation(fields: [roomId], references: [id])
+  actorId     String?
+  actor       User?             @relation("TimelineActor", fields: [actorId], references: [id])
+
+  @@index([exerciseId, createdAt])
+  @@index([exerciseId, type])
+  @@map("timeline_events")
+}
+
+enum TimelineEventType {
+  INJECT_DELIVERED
+  INJECT_READ
+  RFI_SENT
+  RFI_ANSWERED
+  RFI_DEFERRED
+  RFI_REDIRECTED
+  PHASE_STARTED
+  PHASE_COMPLETED
+  EXERCISE_STARTED
+  EXERCISE_PAUSED
+  EXERCISE_RESUMED
+  EXERCISE_COMPLETED
+  COMM_RULE_CHANGED
+  PLAYER_JOINED
+  PLAYER_LEFT
+  DECISION_TAGGED
+  CROSS_ROOM_MESSAGE
+}
