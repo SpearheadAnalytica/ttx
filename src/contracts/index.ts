@@ -20,3 +20,5 @@ export * from './api';
 export * from './editor';
 export * from './aar';
 export * from './reconstruction';
+export * from './audit';
+export * from './projection';

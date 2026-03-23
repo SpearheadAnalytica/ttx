@@ -6,7 +6,7 @@
  * Actions are the only way to modify state.
  */
 
-import type { UserId, User, Role, RolePermissions } from './user';
+import type { UserId, User, Role, StaffFlags, RolePermissions } from './user';
 import type { ExerciseId, Exercise, ExerciseStatus } from './exercise';
 import type { RoomId, Room } from './room';
 import type { MessageId, Message, RichTextContent, RfiStatus } from './message';
@@ -40,7 +40,9 @@ export type ExerciseStore = {
   exercise: Exercise | null;
   /** Current user's role in this exercise. */
   currentRole: Role | null;
-  /** Current user's permissions (derived from role). */
+  /** Current user's staff flags. */
+  currentFlags: StaffFlags | null;
+  /** Current user's permissions (derived from role + flags). */
   permissions: RolePermissions | null;
   /** Elapsed time since exercise started (seconds). Updated by timer. */
   elapsedSeconds: number;
@@ -51,7 +53,7 @@ export type ExerciseStore = {
 
   // ── Actions ──
   setExercise: (exercise: Exercise) => void;
-  setRole: (role: Role, permissions: RolePermissions) => void;
+  setRole: (role: Role, flags: StaffFlags, permissions: RolePermissions) => void;
   updateStatus: (status: ExerciseStatus) => void;
   tickTimer: () => void;
   setTimerRunning: (isRunning: boolean) => void;
@@ -261,4 +263,46 @@ export type SocketStore = {
   incrementReconnectAttempts: () => void;
   resetReconnectAttempts: () => void;
   setLastError: (error: string | null) => void;
+  /** Whether the client is showing a reconnecting banner. */
+  isReconnecting: boolean;
+  setReconnecting: (isReconnecting: boolean) => void;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PROJECTION STORE — master projection state
+// ═══════════════════════════════════════════════════════════════
+
+import type { ProjectionState, ProjectionInject, ProjectionConfig } from './projection';
+
+export type ProjectionStore = {
+  // ── State ──
+  state: ProjectionState | null;
+  /** Whether the projection window is open (for facilitator). */
+  isProjectionOpen: boolean;
+  isLoading: boolean;
+
+  // ── Actions ──
+  setState: (state: ProjectionState) => void;
+  addInject: (inject: ProjectionInject) => void;
+  clearInject: () => void;
+  updateConfig: (config: Partial<ProjectionConfig>) => void;
+  setProjectionOpen: (isOpen: boolean) => void;
+  setLoading: (isLoading: boolean) => void;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// LOBBY STORE — player lobby for room code join flow
+// ═══════════════════════════════════════════════════════════════
+
+import type { ExerciseParticipant } from './user';
+
+export type LobbyStore = {
+  // ── State ──
+  /** Players waiting in the lobby (unassigned). */
+  lobbyPlayers: Array<{ userId: UserId; displayName: string; joinedAt: Date }>;
+
+  // ── Actions ──
+  addPlayer: (player: LobbyStore['lobbyPlayers'][number]) => void;
+  removePlayer: (userId: UserId) => void;
+  setPlayers: (players: LobbyStore['lobbyPlayers']) => void;
 };

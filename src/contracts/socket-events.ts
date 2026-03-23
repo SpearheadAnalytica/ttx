@@ -5,11 +5,13 @@
 
 import type { UserId } from './user';
 import type { RoomId } from './room';
+import type { ExerciseId } from './exercise';
 import type { Message, SendMessageInput, RfiStatus } from './message';
 import type { Inject } from './inject';
 import type { EvaluatorNote, CreateNoteInput } from './evaluator';
 import type { CommunicationMatrix } from './communication';
 import type { TimelineEvent } from './timeline';
+import type { ProjectionState, ProjectionInject } from './projection';
 
 /** Events the client can emit to the server. */
 export type ClientToServerEvents = {
@@ -28,6 +30,12 @@ export type ClientToServerEvents = {
   /** Facilitator manually delivers an inject. */
   'inject:trigger': (input: { injectId: string }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
 
+  /** Facilitator pushes an inject to the master projection. */
+  'inject:show_on_projection': (input: { injectId: string }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  /** Facilitator clears the projection inject display. */
+  'inject:clear_projection': (callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
   /** Facilitator changes exercise phase. */
   'phase:advance': (callback: (result: { ok: true; phaseId: string } | { ok: false; error: string }) => void) => void;
 
@@ -43,6 +51,9 @@ export type ClientToServerEvents = {
 
   /** Client joins a room on connect. */
   'room:join': (input: { exerciseId: string; roomId?: RoomId }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  /** Facilitator assigns a lobby player to a room. */
+  'lobby:assign': (input: { userId: UserId; roomId: RoomId }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
 };
 
 /** Events the server can emit to clients. */
@@ -73,6 +84,24 @@ export type ServerToClientEvents = {
 
   /** Exercise status change (paused, resumed, completed). */
   'exercise:status': (update: { status: 'active' | 'paused' | 'completed' }) => void;
+
+  /** Master projection state update (full state push). */
+  'projection:state': (state: ProjectionState) => void;
+
+  /** New inject displayed on the master projection. */
+  'projection:inject': (inject: ProjectionInject) => void;
+
+  /** Projection inject cleared by facilitator. */
+  'projection:clear': () => void;
+
+  /** New player arrived in lobby (for facilitator). */
+  'lobby:player_joined': (update: { userId: UserId; displayName: string }) => void;
+
+  /** Player assigned from lobby to room (for the player). */
+  'lobby:assigned': (update: { roomId: RoomId; roomName: string }) => void;
+
+  /** Connection status — shown when reconnecting. */
+  'connection:reconnecting': (update: { attempt: number }) => void;
 
   /** Error broadcast. */
   'error': (error: { code: string; message: string }) => void;

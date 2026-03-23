@@ -24,42 +24,128 @@ A real-time, web-based Tabletop Exercise (TTX) platform for cybersecurity incide
 
 ## UI Design
 
-- **Aesthetic**: Dark, tactical — command-center feel with monospace accents
-- **Theme**: Dark-first with high-contrast elements for readability during long exercises
-- **Color palette**: Slate/zinc backgrounds, emerald accents for success, amber for warnings, red for critical injects
-- **Typography**: Inter for body, JetBrains Mono for timestamps/codes/IDs
+- **Aesthetic**: Professional crisis management — serious, trustworthy, government-ready
+- **Theme**: Light default for all views. Dark option toggle. Projection defaults to dark (better on projectors in dim rooms)
 - **Rich text**: Full formatting — bold, italic, headers, lists, code blocks, tables, file attachments, @mentions
-- **Editor experience**: Tiptap with slash commands, toolbar, markdown shortcuts. Must feel as good as Notion.
-- **Layout**: Dense but not cramped. Generous padding in text areas. Chat messages get full width.
+- **Editor experience**: Tiptap with slash commands, toolbar, markdown shortcuts. Must feel as good as Notion
+- **Layout**: Dense but not cramped. Generous padding in text areas. Chat messages get full width
+
+### Light Theme Palette (Default)
+
+```
+Background:     #FFFFFF               Surface:        #F8FAFC  (light gray)
+Surface raised: #FFFFFF  (white)      Border:         #E2E8F0  (soft gray)
+Text primary:   #1A202C  (near-black) Text secondary: #64748B  (slate)
+Text disabled:  #CBD5E1  (light slate)
+```
+
+### Dark Theme Palette (Toggle + Projection Default)
+
+```
+Background:     #0F1419  (near-black) Surface:        #1A2332  (dark navy)
+Surface raised: #243044  (elevated)   Border:         #2D3F56  (subtle)
+Text primary:   #E8ECF1  (off-white)  Text secondary: #8899AA  (muted)
+Text disabled:  #4A5568  (ghosted)
+```
+
+### Status Colors (Same Across Themes)
+
+```
+Active/Live:    #16A34A  (green)      Warning:        #D97706  (amber)
+Critical:       #DC2626  (red)        Info/Inject:    #2563EB  (blue)
+White Card:     #9333EA  (purple)     Primary action: #2563EB  (blue)
+```
+
+### Typography
+
+- **Headings & body**: Inter — clean, professional, excellent at small sizes
+- **Monospace** (timestamps, codes, IDs): JetBrains Mono
+
+### Component Style
+
+- Cards with subtle borders, not drop shadows (cleaner, gov-appropriate)
+- Rounded corners: 6px — not boxy, not bubbly
+- Dense information layout — professional tool, not consumer app
+- Status indicators: colored dots + text labels (never color alone — accessibility)
+- Animations: minimal, 150ms transitions for state changes, no bounces or slides
 
 ## Roles & Permissions
 
+Participants have a **base role** (facilitator, evaluator, observer, player) plus **composite staff flags** that layer additional permissions. One person can hold multiple flags.
+
+### Staff Flags
+
+**Design-phase flags** (pre-live exercise configuration):
+- **Creator**: Creates the exercise, assigns all roles, transfers ownership, deletes. Exactly one per exercise.
+- **Co-Planner**: Helps design (rooms, injects, config) but cannot assign roles or transfer ownership.
+
+**Live-phase flags** (during active exercise):
+- **Primary Facilitator**: Runs the live exercise — Go Live, Pause/Resume, Advance Phase, Broadcast to all rooms, End. One per exercise.
+- **Co-Facilitator**: Assists during live — deliver injects, white-card, cut/restore comms, chat in rooms. Cannot control exercise lifecycle.
+
+Common combinations: Creator + Primary Facilitator (solo facilitator), Co-Planner + Co-Facilitator (design helper who also assists live).
+
+### Permission Matrix
+
+| Capability | Creator | Co-Planner | Primary Facil | Co-Facil | Evaluator | Player | Observer |
+|---|---|---|---|---|---|---|---|
+| Create exercise | Yes | — | — | — | — | — | — |
+| Edit exercise config (pre-live) | Yes | Yes | Yes | No | No | No | No |
+| Add/remove rooms | Yes | Yes | No | No | No | No | No |
+| Add/remove players | Yes | Yes | Yes | No | No | No | No |
+| Create/edit injects | Yes | Yes | Yes | No | No | No | No |
+| Assign facilitators | Yes | No | No | No | No | No | No |
+| Assign co-planners | Yes | No | No | No | No | No | No |
+| Go Live / End | — | — | Yes | No | No | No | No |
+| Pause / Resume | — | — | Yes | No | No | No | No |
+| Advance phase | — | — | Yes | No | No | No | No |
+| Deliver injects | — | — | Yes | Yes | No | No | No |
+| White-card injects | — | — | Yes | Yes | No | No | No |
+| Cut/restore comms | — | — | Yes | Yes | No | No | No |
+| Broadcast (all rooms) | — | — | Yes | No | No | No | No |
+| View all rooms | — | — | Yes | Yes | Config | No | Yes |
+| View own room | — | — | — | — | Config | Yes | — |
+| Chat in room | — | — | Yes | Yes | No | Yes | No |
+| Add notes | — | — | Yes | Yes | Yes | No | No |
+| Rate responses | — | — | No | No | Yes | No | No |
+| Export data | Yes | Yes | Yes | Yes | Yes | No | No |
+| View audit log | Yes | Yes | Yes | Yes | No | No | No |
+| View master projection | All | All | All | All | All | All | All |
+
+### Role Details
+
 ```
-FACILITATOR (White Cell)
-├── Can: create/edit exercises, manage rooms, send injects, respond to RFIs,
-│        control timing, change communication rules mid-exercise, view all rooms
-├── Sees: everything — all rooms, all messages, all evaluator notes
-└── Identity: exercise creator + invited co-facilitators
+FACILITATOR (White Cell) — base role for all facilitator-flagged users
+├── Creator flag
+│   └── Can: create exercise, assign all roles, transfer ownership, delete exercise
+├── Co-Planner flag
+│   └── Can: edit exercise config, manage rooms, create injects (design-phase)
+├── Primary Facilitator flag
+│   └── Can: Go Live, Pause/Resume, Advance Phase, Broadcast, End exercise
+├── Co-Facilitator flag
+│   └── Can: deliver injects, white-card, cut/restore comms, chat in rooms
+└── Common: view all rooms, add notes, export data, view audit log
 
 EVALUATOR (Note-taker / Grader)
-├── Can: take timestamped notes, tag decisions with quick-tags, rate responses,
-│        view assigned room(s) feed, export their notes
+├── Can: take timestamped notes, quick-tag decisions, rate responses
 ├── Cannot: send messages, respond to RFIs, interact with players
-├── Sees: assigned room(s) or all rooms (configurable)
+├── Sees: assigned room(s) — split-pane: live feed + note panel
+├── Quick tags: Good Decision, Gap Identified, Escalation, Meeting Called,
+│              Delay, Creative Solution, Missed Step, Good Coordination
 └── Identity: individually assigned by facilitator (notes are attributed)
 
 OBSERVER (VIP / Read-only)
-├── Can: watch live dashboard, drill into any room feed
-├── Cannot: interact with anything — pure spectator
-├── Sees: all rooms (dashboard view), timeline, room activity levels
+├── Can: watch live dashboard, drill into any room feed (read-only)
+├── Cannot: interact with anything — pure spectator, no notes
+├── Sees: all rooms (dashboard: activity levels + timeline)
 └── Identity: shareable link (optional password) or email invite
 
 PLAYER
 ├── Can: chat in their room, upload files, send RFIs to White Cell,
 │        respond to injects, contact other rooms (if allowed)
-├── Cannot: see other rooms (unless cross-room messaging is enabled for them)
+├── Cannot: see other rooms (unless cross-room messaging is enabled)
 ├── Sees: their room only
-└── Identity: room code or email invite
+└── Identity: room code or email invite, session-locked to one role
 ```
 
 ## Cross-Room Communication
@@ -86,6 +172,112 @@ Stored as an adjacency map: `{ [fromRoomId]: { [toRoomId]: 'direct' | 'routed' |
 ### Mid-Exercise Changes
 
 Facilitator can modify the matrix during the exercise. Changes can optionally trigger an inject to affected rooms explaining the change narratively (e.g., "Network to executive floor is down").
+
+## Single-Room / Plenary Mode
+
+Every exercise starts with one default room called "Plenary." Multi-room is opt-in.
+
+- When a facilitator creates an exercise, a "Plenary" room is auto-created. All players go in it.
+- The setup wizard skips room configuration unless the planner clicks "Add Rooms."
+- In single-room mode, the facilitator dashboard collapses to a simpler layout — no room grid, just one feed.
+- The data model is the same (minimum 1 room always). The UI adapts based on room count.
+- Injects can target a specific room or be "plenary" (exercise-wide, all rooms).
+
+## Master Projection
+
+The master projection is a CNN-style situation display shown on a projector or external screen.
+
+- **Route**: `/exercises/[id]/project` (plenary) or `/exercises/[id]/project/room/[name]` (room-specific)
+- **Default theme**: Dark background, high-contrast (good for dim rooms with projectors). Toggle to light available.
+- **Shows**: exercise clock, current phase, plenary injects, exercise status
+- **Does NOT show**: room-specific injects, facilitator controls, chat, evaluator notes, admin UI
+- **Pop-out**: Facilitator clicks "Open Projection Window" → `window.open()` inherits session, renders projection view only
+- **Room-specific projections**: Separate URLs per room, each opened on that room's display machine
+- **Facilitator-Led Mode**: Projection becomes primary delivery channel. Shows ALL injects (not just plenary). Facilitator clicks "Show on Projection" to push injects.
+
+## Player Participation Modes
+
+Three participation modes, set at exercise level (or per-room in hybrid mode):
+
+| Feature | Digital | Facilitator-Led | Hybrid |
+|---|---|---|---|
+| Player invite links | Yes | No | Per room |
+| Player login portal | Active | Disabled | Per room |
+| Player chat | Active | Disabled | Per room |
+| Player response submission | Digital form | Facilitator logs manually | Mixed |
+| Inject delivery | Push to device | Projection/verbal | Mixed |
+| Master projection shows | Plenary context | ALL injects (primary channel) | Plenary |
+
+In hybrid mode, each room independently gets its participation mode. Example: SOC team is remote (digital), executives are in a conference room (facilitator-led).
+
+## Player Join Flow
+
+Two join methods (or both):
+
+**Room Code (Quick Join)**: Facilitator shares code verbally or on projection. Players enter code + name → land in lobby. Facilitator assigns them to rooms/roles from the lobby.
+
+**Email Invites (Pre-Planned)**: Upload CSV or add manually. Each gets a magic link → one click, no password, lands in assigned role. Can schedule send timing: now, at exercise start, or manual trigger.
+
+**Both**: Email invites for known participants + room code for walk-ins.
+
+## Player Identity & Session Model
+
+- One user = one role per exercise (enforced)
+- One role = one active session at a time (session lock)
+- If someone else tries the same role: "This role is currently active in another session"
+- Facilitator can transfer a role to another user mid-exercise
+- On transfer: old player loses access immediately, messages stay attributed to the role name
+- **Messages belong to roles, not people**: AAR shows "SOC Analyst said X" regardless of which human was behind the role. Audit log tracks both.
+
+## Mobile-First Player View
+
+Player view targets 320px–768px widths as primary:
+
+- **Phone**: Bottom tab bar (Feed, Chat, Role, Injects) — always visible, no hamburger menu
+- **Tablet (768px–1024px)**: Split view — feed left, chat right
+- **Offline/poor connectivity**: Cache last state, show "Reconnecting..." banner, queue outbound messages, WebSocket with auto-reconnect + polling fallback
+
+## FedRAMP-Ready Patterns
+
+Built-in from day one, even during development:
+
+Every API endpoint follows the 6-step pattern:
+1. Authenticate (who are you?)
+2. Authorize (can you do this action on this resource?)
+3. Validate input (is the data shaped correctly?)
+4. Execute (do the thing)
+5. Audit log (record what happened)
+6. Return (scoped to what the caller is allowed to see)
+
+| Requirement | Implementation |
+|---|---|
+| Encryption at rest | AES-256 for stored exercise content |
+| Encryption in transit | HTTPS everywhere, TLS for all API calls |
+| Auth & sessions | Proper session tokens with rotation, expiry, secure flags |
+| Audit logging | Immutable append-only log: timestamp, actor, action, target, result. No deletes ever |
+| Input validation | Strict schema validation on every API endpoint. Parameterized queries only |
+| RBAC | Permission model enforced server-side, not just UI-hidden |
+| Secret management | Environment variables, .env in .gitignore, no hardcoded secrets |
+| Dependency scanning | npm audit in CI, pinned dependency versions |
+| Data residency | US-only data storage, self-hosted assets (no Google Fonts, no foreign CDN) |
+| Session timeout | Auto-logout after inactivity, configurable per-org, default 30 minutes |
+| FIPS 140-2 crypto | Node built-in crypto with FIPS-compliant algorithms |
+
+## Response Collection
+
+Automatic capture — players don't fill out forms:
+
+| Data | How Captured |
+|---|---|
+| Chat messages | Logged automatically with timestamps, sender role, room |
+| RFIs sent to White Cell | Logged when sent |
+| Cross-room messages | Logged when sent |
+| Documents uploaded | Logged when dropped into room |
+| Inject read receipts | Logged when player opens inject |
+| Inject response times | Time from delivery to first substantive action |
+| Timeline | Composite of all above |
+
+Facilitator/evaluator observation notes provide the qualitative data. Formal deliverables (press statements, incident reports) are the one place players actively submit — part of the exercise, not admin overhead.
 
 ## Data Model (High-Level)
 
@@ -144,6 +336,8 @@ Event (for timeline)
 /exercises/[id]/reconstruct → Exercise reconstruction visual
 /join/[code]                → Player join via room code
 /watch/[token]              → Observer join via shareable link
+/exercises/[id]/project           → Master projection (plenary)
+/exercises/[id]/project/room/[roomId] → Room-specific projection
 ```
 
 ## Real-Time Architecture

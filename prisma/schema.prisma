@@ -22,11 +22,12 @@ model User {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  createdExercises    Exercise[]          @relation("ExerciseCreator")
+  createdExercises     Exercise[]            @relation("ExerciseCreator")
   exerciseParticipants ExerciseParticipant[]
-  sentMessages        Message[]           @relation("MessageSender")
-  evaluatorNotes      EvaluatorNote[]
-  timelineEvents      TimelineEvent[]     @relation("TimelineActor")
+  sentMessages         Message[]             @relation("MessageSender")
+  evaluatorNotes       EvaluatorNote[]
+  timelineEvents       TimelineEvent[]       @relation("TimelineActor")
+  auditActions         AuditLog[]            @relation("AuditActor")
 
   @@map("users")
 }
@@ -34,26 +35,36 @@ model User {
 // ─── Exercises ───────────────────────────────────────────────
 
 model Exercise {
-  id                    String         @id @default(cuid())
+  id                    String              @id @default(cuid())
   title                 String
-  description           String         @default("")
-  status                ExerciseStatus @default(DRAFT)
+  description           String              @default("")
+  status                ExerciseStatus      @default(DRAFT)
   communicationPreset   CommunicationPreset @default(CONTROLLED)
   /// Stored as JSON: Record<string, Record<string, 'direct' | 'routed' | 'blocked'>>
-  communicationMatrix   Json           @default("{}")
+  communicationMatrix   Json                @default("{}")
+  /// How players participate: DIGITAL, FACILITATOR_LED, or HYBRID (per-room)
+  participationMode     ParticipationMode   @default(DIGITAL)
+  /// How players join: ROOM_CODE, EMAIL_INVITE, or BOTH
+  joinMethod            PlayerJoinMethod    @default(ROOM_CODE)
+  /// Exercise-level join code for room code method
+  exerciseCode          String?             @unique
+  /// Email invite timing: NOW, AT_EXERCISE_START, MANUAL
+  emailInviteTiming     EmailInviteTiming   @default(MANUAL)
+  /// Master projection configuration
+  projectionConfig      Json                @default("{\"showClock\": true, \"showPhase\": true, \"customBackgroundUrl\": null}")
   startedAt             DateTime?
   pausedAt              DateTime?
   completedAt           DateTime?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
   // Creator
   createdById           String
-  createdBy             User           @relation("ExerciseCreator", fields: [createdById], references: [id])
+  createdBy             User                @relation("ExerciseCreator", fields: [createdById], references: [id])
 
   // Observer access config (embedded as JSON for flexibility)
   /// { accessType: 'link'|'password'|'email_list', password?: string, allowedEmails?: string[], linkToken?: string }
-  observerConfig        Json           @default("{\"accessType\": \"link\", \"password\": null, \"allowedEmails\": [], \"linkToken\": null}")
+  observerConfig        Json                @default("{\"accessType\": \"link\", \"password\": null, \"allowedEmails\": [], \"linkToken\": null}")
 
   // Relations
   rooms                 Room[]
@@ -61,6 +72,7 @@ model Exercise {
   participants          ExerciseParticipant[]
   messages              Message[]
   timelineEvents        TimelineEvent[]
+  auditLogs             AuditLog[]
 
   @@index([createdById])
   @@index([status])
@@ -81,23 +93,57 @@ enum CommunicationPreset {
   CUSTOM
 }
 
+enum ParticipationMode {
+  DIGITAL
+  FACILITATOR_LED
+  HYBRID
+}
+
+enum PlayerJoinMethod {
+  ROOM_CODE
+  EMAIL_INVITE
+  BOTH
+}
+
+enum EmailInviteTiming {
+  NOW
+  AT_EXERCISE_START
+  MANUAL
+}
+
 // ─── Participants (role assignments per exercise) ────────────
 
 model ExerciseParticipant {
-  id              String   @id @default(cuid())
+  id              String          @id @default(cuid())
   role            ParticipantRole
   /// For evaluators: room IDs they can observe. Empty array = all rooms.
-  assignedRoomIds String[] @default([])
-  joinedAt        DateTime @default(now())
+  assignedRoomIds String[]        @default([])
+  joinedAt        DateTime        @default(now())
+
+  // Composite staff flags (layered on top of base role)
+  /// The user who created the exercise. Exactly one per exercise.
+  isCreator             Boolean   @default(false)
+  /// Can help design the exercise (rooms, injects) but cannot assign roles.
+  isCoPlanner           Boolean   @default(false)
+  /// Runs the live exercise (Go Live, Pause, Advance, Broadcast). One per exercise.
+  isPrimaryFacilitator  Boolean   @default(false)
+  /// Assists during live (deliver injects, white-card, cut comms).
+  isCoFacilitator       Boolean   @default(false)
+
+  /// The role name displayed in the exercise (e.g., "SOC Analyst").
+  /// Used for message attribution. Null for staff who don't play a named role.
+  roleName              String?
 
   // Relations
   userId          String
-  user            User     @relation(fields: [userId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
   exerciseId      String
-  exercise        Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  exercise        Exercise        @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
 
   @@unique([userId, exerciseId])
   @@index([exerciseId, role])
+  @@index([exerciseId, isCreator])
+  @@index([exerciseId, isPrimaryFacilitator])
   @@map("exercise_participants")
 }
 
@@ -111,15 +157,19 @@ enum ParticipantRole {
 // ─── Rooms ───────────────────────────────────────────────────
 
 model Room {
-  id          String   @id @default(cuid())
-  name        String
-  description String   @default("")
+  id                String                @id @default(cuid())
+  name              String
+  description       String                @default("")
   /// Hex color for room identification (e.g., '#10b981')
-  color       String   @default("#10b981")
+  color             String                @default("#10b981")
   /// Join code for players (e.g., 'SOC-7X3K')
-  joinCode    String   @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  joinCode          String                @unique
+  /// Whether this is the default plenary room (first room, always exists)
+  isPlenary         Boolean               @default(false)
+  /// Per-room participation mode for hybrid exercises
+  participationMode RoomParticipationMode @default(DIGITAL)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   // Relations
   exerciseId  String
@@ -132,6 +182,11 @@ model Room {
 
   @@index([exerciseId])
   @@map("rooms")
+}
+
+enum RoomParticipationMode {
+  DIGITAL
+  FACILITATOR_LED
 }
 
 /// Join table: which players are in which room
@@ -156,6 +211,10 @@ model Message {
   /// File attachments as JSON array
   attachments Json        @default("[]")
   createdAt   DateTime    @default(now())
+
+  /// The role name displayed in the exercise (e.g., "SOC Analyst").
+  /// Messages belong to roles, not people — the AAR uses this for narrative.
+  senderRoleName  String  @default("")
 
   // RFI-specific fields
   rfiId           String?
@@ -236,6 +295,8 @@ model Inject {
   status              InjectStatus         @default(PENDING)
   /// File attachments as JSON array
   attachments         Json                 @default("[]")
+  /// Whether this inject targets all rooms (plenary) or a specific room
+  isPlenary           Boolean              @default(false)
   deliveredAt         DateTime?
   readAt              DateTime?
   createdAt           DateTime             @default(now())
@@ -244,8 +305,9 @@ model Inject {
   phaseId             String
   phase               Phase                @relation(fields: [phaseId], references: [id], onDelete: Cascade)
   exerciseId          String
-  targetRoomId        String
-  targetRoom          Room                 @relation(fields: [targetRoomId], references: [id])
+  /// Null when isPlenary is true (targets all rooms)
+  targetRoomId        String?
+  targetRoom          Room?                @relation(fields: [targetRoomId], references: [id])
 
   @@index([phaseId])
   @@index([exerciseId, status])
@@ -342,4 +404,35 @@ enum TimelineEventType {
   PLAYER_LEFT
   DECISION_TAGGED
   CROSS_ROOM_MESSAGE
+  ROLE_TRANSFERRED
+}
+
+// ─── Audit Log (FedRAMP-ready, append-only) ──────────────────
+
+/// Immutable audit log. Every state-changing action gets an entry.
+/// No updates, no deletes — ever.
+model AuditLog {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  /// The action performed (e.g., 'exercise.create', 'message.send')
+  action      String
+  /// Target resource type (e.g., 'exercise', 'room', 'message')
+  targetType  String
+  /// Target resource ID
+  targetId    String
+  /// Whether the action succeeded or failed
+  result      String   // 'success' | 'failure'
+  /// Action-specific details (what changed, error message on failure)
+  metadata    Json     @default("{}")
+
+  // Relations
+  actorId     String?
+  actor       User?    @relation("AuditActor", fields: [actorId], references: [id])
+  exerciseId  String?
+  exercise    Exercise? @relation(fields: [exerciseId], references: [id])
+
+  @@index([exerciseId, timestamp])
+  @@index([actorId, timestamp])
+  @@index([action])
+  @@map("audit_logs")
 }
