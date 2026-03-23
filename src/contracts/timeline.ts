@@ -26,7 +26,8 @@ export type TimelineEventType =
   | 'player_joined'
   | 'player_left'
   | 'decision_tagged'
-  | 'cross_room_message';
+  | 'cross_room_message'
+  | 'role_transferred';
 
 export type TimelineEvent = {
   id: TimelineEventId;

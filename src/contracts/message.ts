@@ -1,7 +1,13 @@
 /**
  * Message contracts — all communication within rooms.
+ *
  * Messages are polymorphic: chat, RFI, inject delivery, system, and cross-room
  * are all Message records with different `type` values.
+ *
+ * Key design decision: MESSAGES BELONG TO ROLES, NOT PEOPLE.
+ * When the AAR shows "SOC Analyst said X at T+00:22," it doesn't matter which
+ * person was playing that role. The role is the actor in the exercise narrative.
+ * The audit log records both role and underlying user for accountability.
  */
 
 import type { UserId } from './user';
@@ -52,11 +58,26 @@ export type MessageMetadata = {
   redirectRoomId: RoomId | null;
 };
 
+/**
+ * A message in the exercise.
+ *
+ * Attribution model:
+ * - senderId: the actual User who sent the message (for audit/accountability)
+ * - senderRoleName: the exercise role name displayed in the UI (e.g., "SOC Analyst")
+ * - senderRoleTitle: optional title within the role (e.g., "Team Lead")
+ *
+ * The AAR and exercise narrative use senderRoleName. The audit log uses senderId.
+ * If a role is transferred mid-exercise, messages keep the role name — only the
+ * audit log shows which human was behind the role at that moment.
+ */
 export type Message = {
   id: MessageId;
   exerciseId: string;
   roomId: RoomId;
+  /** The actual user who sent this message. For audit/accountability. */
   senderId: UserId;
+  /** The role name displayed in the exercise (e.g., "SOC Analyst"). */
+  senderRoleName: string;
   content: RichTextContent;
   attachments: Attachment[];
   type: MessageType;

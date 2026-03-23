@@ -1,63 +1,77 @@
 # TTX Platform — Project Context
 
-## Status: Contracts Complete, Sprint 1 Ready
+## Status: All Contracts Complete, Sprint 1 Ready
+
+Last session: 2026-03-23
+Branch: `claude/review-context-docs-XvYhr`
+Commits: 3 (648dcea, 8185743, 9b58aac)
 
 ## What's Done
 
-### Architecture (ARCHITECTURE.md)
-- Full system design documented
-- Tech stack: Next.js 14, Socket.io, Tiptap v2, Tailwind, shadcn/ui, PostgreSQL + Prisma, D3.js, Claude API
-- UI aesthetic: dark tactical, command-center feel
-- Four roles: Facilitator, Evaluator, Observer, Player
-- Cross-room communication system with presets (open/hierarchical/controlled/custom)
-- Communication matrix model: adjacency map with direct/routed/blocked modes
-- AAR system: AI agent generates structured draft from all exercise data
-- Exercise reconstruction: interactive visual replay with analysis overlays
-- Error handling: typed error codes with HTTP status mapping
-- API design: REST for CRUD, Socket.io for real-time, cursor-based pagination
-- File uploads: two-step presigned URL flow
-- Page structure, directory layout, security model, performance targets
+### Architecture (ARCHITECTURE.md — 30+ sections)
+- Full system design covering all aspects of the TTX platform
+- Tech stack: Next.js 14, Socket.io, Tiptap v2, Tailwind, shadcn/ui, PostgreSQL + Prisma, D3.js, Claude API, Jitsi (self-hosted), Keycloak
+- Composite role model with 4 base roles + 4 staff flags, 22-capability permission matrix
+- 6-state exercise lifecycle: DRAFT → CONFIGURING → READY → LIVE → PAUSED → COMPLETED
+- Three participation modes (Digital, Facilitator-Led, Hybrid), two join methods (room code, email invite)
+- Multi-room membership with information asymmetry as a first-class mechanic
+- Video conferencing via self-hosted Jitsi with facilitator comms control
+- Enterprise auth: PIV/CAC, SAML/OIDC via Keycloak identity broker
+- Player-to-player DMs with facilitator controls
+- 11-step setup wizard with dry run and bulk CSV import
+- Configurable export wizard (11 data categories, CSV/Excel)
+- White-card form contract for live inject creation
+- Master projection, mobile-first player view, FedRAMP patterns
+- Full design system with light/dark color palettes
 
-### Contracts (src/contracts/ — 16 files)
+### Contracts (src/contracts/ — 21 files)
 All TypeScript types defined as single source of truth:
-- `user.ts` — User, Role, ExerciseParticipant, RolePermissions with full permission map
-- `exercise.ts` — Exercise, ExerciseStaff, ObserverConfig, create/update inputs
-- `room.ts` — Room with join codes, create/update inputs
-- `message.ts` — Polymorphic Message (chat/rfi/inject/system/cross_room), RichTextContent as Tiptap JSON, Attachment, RFI lifecycle
-- `inject.ts` — Phase and Inject with timing, delivery methods, status tracking
-- `communication.ts` — CommunicationMatrix, CommunicationMode, mid-exercise change types
-- `evaluator.ts` — EvaluatorNote, QuickTag system (11 tags), Rating, NoteSummary
-- `socket-events.ts` — Full ClientToServerEvents and ServerToClientEvents type maps
-- `timeline.ts` — TimelineEvent with 17 event types
-- `services.ts` — All service function signatures (8 services, ~60 functions)
-- `stores.ts` — All Zustand store state + actions (9 stores)
-- `errors.ts` — 35 typed error codes, HTTP status mapping, factory function signatures
-- `api.ts` — All REST request/response shapes, pagination, file upload flow
-- `editor.ts` — EditorVariant configs (5 variants), feature flags, RichEditorProps
-- `aar.ts` — AAR document model, AI agent input/output, generation progress, export formats
-- `reconstruction.ts` — Visual replay data model, playback controls, analysis overlays, drill-down, annotations
+- `user.ts` — User, Role, StaffFlags, AuthProvider, AuthConfig, SessionConfig, derivePermissions()
+- `exercise.ts` — Exercise, ExerciseStatus (6 states), VALID_TRANSITIONS, SetupWizardStep, DryRunState, BulkPlayerImport/InjectImport, ExerciseDMConfig
+- `room.ts` — Room, RoomPlayer (multi-room), VisibilityRules (info asymmetry), RoomVideoConfig
+- `message.ts` — Polymorphic Message with senderRoleName
+- `inject.ts` — Phase, Inject, InjectTypeTag (9 tags), WhiteCardForm, WhiteCardInject
+- `communication.ts` — CommunicationMatrix, mid-exercise changes
+- `evaluator.ts` — EvaluatorNote, QuickTag, Rating
+- `video.ts` — JitsiConfig, VideoParticipant, VideoMeetingState, JitsiCommand
+- `dm.ts` — DirectMessage, DMThread, DMPermissions
+- `export.ts` — ExportCategory (11), ExportConfig, ExportResult
+- `socket-events.ts` — All events: projection, lobby, video, DM, reconnection
+- `timeline.ts` — TimelineEvent with 18 event types
+- `services.ts` — 16 service types: Exercise, Room, Message, Inject, Communication, Evaluator, Timeline, Staff, Auth, Audit, Projection, Join, Video, DM, Export, Setup
+- `stores.ts` — 15 Zustand stores: Auth, Exercise, Room, Message, Rfi, Inject, Communication, Evaluator, Timeline, Socket, Projection, Lobby, Video, DM, Export
+- `errors.ts` — 35 typed error codes
+- `api.ts` — REST request/response shapes
+- `editor.ts` — 5 editor variants
+- `aar.ts` — AAR document model, AI agent
+- `reconstruction.ts` — Visual replay
+- `audit.ts` — Append-only audit log
+- `projection.ts` — Master projection state
 
-### Database Schema (prisma/schema.prisma)
-- All tables: User, Exercise, ExerciseParticipant, Room, RoomPlayer, Message, Phase, Inject, EvaluatorNote, TimelineEvent
-- All enums: ExerciseStatus, CommunicationPreset, ParticipantRole, MessageType, RfiStatus, InjectType, InjectDeliveryMethod, InjectStatus, TimelineEventType
-- Indexes on all query-hot paths
-- Cascade deletes on exercise children
+### Database Schema (prisma/schema.prisma — 12 models, 13 enums)
+- Models: User, Exercise, ExerciseParticipant, Room, RoomPlayer, Message, DirectMessage, Phase, Inject, EvaluatorNote, TimelineEvent, AuditLog
+- ExerciseStatus: 6 values (DRAFT/CONFIGURING/READY/LIVE/PAUSED/COMPLETED)
+- RoomPlayer: multi-room membership (unique on roomId+userId+exerciseId)
+- Room: isPlenary, participationMode, isVideoEnabled, visibilityRules
+- DirectMessage model for player-to-player DMs
+- AuditLog: immutable append-only
 
-### Infrastructure
-- Playwright configured (headless Chromium)
-- TypeScript strict mode
-- Git repo with branch `claude/ttx-tool-setup-U6ihf`
+### Quality Gates Passed
+- Review: No `any` types, no silent failures, no unnecessary complexity
+- Debug loop: All imports valid, state machine complete, permissions correct
+- Security: 0 npm vulnerabilities, no hardcoded secrets, no OWASP patterns
+- Circular import between exercise.ts ↔ dm.ts resolved
 
 ## What's Next — Sprint 1
 
-**Goal**: Rich text editor + single room with live chat. Editor-first because text UX is the #1 adoption factor.
+**Goal**: Rich text editor + single room with live chat
 
 Build order:
-1. Next.js scaffolding + Tailwind dark theme
+1. Next.js scaffolding + Tailwind light/dark theme
 2. Tiptap rich text editor (5 variants: chat, note, inject, rfi, response)
 3. Room chat UI (message list + composer)
 4. Socket.io real-time messaging
-5. PostgreSQL schema + Prisma
+5. PostgreSQL schema + Prisma migrations
 6. Tests (Playwright E2E + Vitest unit)
 
 See SPRINT.md for full function signatures and scope.
@@ -66,30 +80,34 @@ See SPRINT.md for full function signatures and scope.
 
 | Decision | Why |
 |---|---|
-| Editor-first build order | Text experience is make-or-break for adoption |
-| Tiptap v2 (not Slate, not Quill) | Headless, extensible, ProseMirror core, collaboration-ready |
-| Tiptap JSON storage (not HTML) | Structured, queryable, renders consistently |
-| Branded ID types (e.g., `RoomId`) | Prevents accidental ID mixing at compile time |
-| Role permissions derived, not stored | Single source of truth in ROLE_PERMISSIONS constant |
-| Communication matrix as adjacency map | Flexible, supports all presets, easy mid-exercise changes |
-| White Cell responses are manual | Keeps facilitator in full control, AI-assist can come later |
-| Observer link with optional auth | Low friction for VIPs, optional password for security |
-| AI-drafted AAR (not manual) | The report is the deliverable — AI makes it effortless |
-| Reconstruction as analysis tool | Not just a pretty timeline — overlays, drill-down, annotations |
-| Typed error codes (not error classes) | Serializable over the wire, exhaustive matching, consistent format |
-| Cursor-based pagination | Stable under concurrent inserts, no offset drift |
-| Presigned URL uploads | Keeps large files off the app server |
+| Composite flags (not hierarchical roles) | Flexible assignment without role explosion |
+| Messages belong to roles, not people | AAR narrative is role-based |
+| 6-state lifecycle (not 4) | CONFIGURING and READY prevent premature Go Live |
+| Multi-room membership | Players as natural coordination points |
+| Information asymmetry first-class | Per-room visibility rules |
+| Jitsi self-hosted | Compliance-friendly, destroy meeting = cut comms |
+| Keycloak identity broker | PIV/CAC, SAML, OIDC, email in one broker |
+| Player-to-player DMs | Mirrors real incident response |
+| 11-step setup wizard | Guided setup prevents misconfiguration |
+| Dry run before Go Live | Validates inject timing without players |
+| Configurable export (11 categories) | Covers all post-exercise reporting needs |
+| White-card form with type tags | Rich live inject creation |
+| Append-only audit log | FedRAMP-ready, no deletes ever |
 
 ## Lessons Learned
-- None yet (first sprint not started)
+
+- Capture design conversations into contracts immediately — gaps create drift
+- Contract files are cheap; missing contracts are expensive
+- Circular imports emerge when domain boundaries aren't clean — inline types to break cycles
+- Review + debug loop catches real issues (missing enum values, import cycles) that visual review misses
 
 ## File Map
 ```
-ARCHITECTURE.md          — Full system design
+ARCHITECTURE.md          — Full system design (30+ sections)
 SPRINT.md                — Sprint 1 plan with function signatures
 CONTEXT.md               — This file
 CLAUDE.md                — Project principles and workflow
-src/contracts/           — TypeScript type contracts (16 files)
-prisma/schema.prisma     — Database schema
+src/contracts/           — TypeScript type contracts (21 files)
+prisma/schema.prisma     — Database schema (12 models, 13 enums)
 tests/                   — Test directory (placeholder only)
 ```

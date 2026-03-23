@@ -5,11 +5,15 @@
 
 import type { UserId } from './user';
 import type { RoomId } from './room';
+import type { ExerciseId, ExerciseStatus } from './exercise';
 import type { Message, SendMessageInput, RfiStatus } from './message';
 import type { Inject } from './inject';
 import type { EvaluatorNote, CreateNoteInput } from './evaluator';
 import type { CommunicationMatrix } from './communication';
 import type { TimelineEvent } from './timeline';
+import type { ProjectionState, ProjectionInject } from './projection';
+import type { DirectMessage } from './dm';
+import type { VideoMeetingState, VideoParticipant } from './video';
 
 /** Events the client can emit to the server. */
 export type ClientToServerEvents = {
@@ -28,6 +32,12 @@ export type ClientToServerEvents = {
   /** Facilitator manually delivers an inject. */
   'inject:trigger': (input: { injectId: string }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
 
+  /** Facilitator pushes an inject to the master projection. */
+  'inject:show_on_projection': (input: { injectId: string }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  /** Facilitator clears the projection inject display. */
+  'inject:clear_projection': (callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
   /** Facilitator changes exercise phase. */
   'phase:advance': (callback: (result: { ok: true; phaseId: string } | { ok: false; error: string }) => void) => void;
 
@@ -43,6 +53,35 @@ export type ClientToServerEvents = {
 
   /** Client joins a room on connect. */
   'room:join': (input: { exerciseId: string; roomId?: RoomId }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  /** Facilitator assigns a lobby player to a room. */
+  'lobby:assign': (input: { userId: UserId; roomId: RoomId }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  // ── Video Events ─────────────────────────────────────────────
+
+  /** Facilitator creates a video meeting for a room. */
+  'video:create_meeting': (input: { roomId: RoomId }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  /** Facilitator destroys a video meeting (cuts comms). */
+  'video:destroy_meeting': (input: { roomId: RoomId }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  /** Facilitator mutes a participant. */
+  'video:mute': (input: { roomId: RoomId; userId: UserId }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  /** Facilitator kicks a participant from video. */
+  'video:kick': (input: { roomId: RoomId; userId: UserId }, callback: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+
+  // ── DM Events ────────────────────────────────────────────────
+
+  /** Send a direct message. */
+  'dm:send': (input: { recipientId: UserId; content: Message['content'] }, callback: (result: { ok: true; message: DirectMessage } | { ok: false; error: string }) => void) => void;
+
+  /** Mark a DM thread as read. */
+  'dm:mark_read': (input: { threadId: string }) => void;
+
+  /** Typing in a DM thread. */
+  'dm:typing_start': (input: { recipientId: UserId }) => void;
+  'dm:typing_stop': (input: { recipientId: UserId }) => void;
 };
 
 /** Events the server can emit to clients. */
@@ -71,9 +110,52 @@ export type ServerToClientEvents = {
   /** Someone stopped typing. */
   'typing:inactive': (update: { roomId: RoomId; userId: UserId }) => void;
 
-  /** Exercise status change (paused, resumed, completed). */
-  'exercise:status': (update: { status: 'active' | 'paused' | 'completed' }) => void;
+  /** Exercise status change. */
+  'exercise:status': (update: { status: ExerciseStatus }) => void;
+
+  /** Master projection state update (full state push). */
+  'projection:state': (state: ProjectionState) => void;
+
+  /** New inject displayed on the master projection. */
+  'projection:inject': (inject: ProjectionInject) => void;
+
+  /** Projection inject cleared by facilitator. */
+  'projection:clear': () => void;
+
+  /** New player arrived in lobby (for facilitator). */
+  'lobby:player_joined': (update: { userId: UserId; displayName: string }) => void;
+
+  /** Player assigned from lobby to room (for the player). */
+  'lobby:assigned': (update: { roomId: RoomId; roomName: string }) => void;
+
+  /** Connection status — shown when reconnecting. */
+  'connection:reconnecting': (update: { attempt: number }) => void;
 
   /** Error broadcast. */
   'error': (error: { code: string; message: string }) => void;
+
+  // ── Video Events ─────────────────────────────────────────────
+
+  /** Video meeting state update. */
+  'video:state': (state: VideoMeetingState) => void;
+
+  /** Participant video state changed (mute, camera, screen share). */
+  'video:participant_update': (update: VideoParticipant) => void;
+
+  /** Meeting created for a room. */
+  'video:meeting_created': (update: { roomId: RoomId; meetingId: string }) => void;
+
+  /** Meeting destroyed (comms cut). */
+  'video:meeting_destroyed': (update: { roomId: RoomId }) => void;
+
+  // ── DM Events ────────────────────────────────────────────────
+
+  /** New direct message received. */
+  'dm:message': (message: DirectMessage) => void;
+
+  /** DM marked as read by recipient. */
+  'dm:read': (update: { threadId: string; readBy: UserId }) => void;
+
+  /** Someone is typing in a DM. */
+  'dm:typing': (update: { senderId: UserId; isTyping: boolean }) => void;
 };
